@@ -4,6 +4,7 @@
     "description" : "check that your C and C++ code compiles",
     "dependencies" : {
         "express" : "3.0.x",
-        "wrench" : "1.4.x"
+        "wrench" : "1.4.x",
+        "forever" : "0.9.x"
     }
 }

@@ -11,7 +11,7 @@ var makeSandbox = function (callback) {
 	var dir = 'sandbox/box-' + Math.random();
 	fs.mkdir(dir, function (err) {
 		callback(err, dir, function () {
-			wrench.rmdirRecursive(dir);
+			wrench.rmdirRecursive(dir, function () { });
 		});
 	});
 };

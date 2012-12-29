@@ -1,4 +1,4 @@
-Amazon EC2 Setup
+Amazon EC2 Setup (http://iconof.com/blog/how-to-install-setup-node-js-on-amazon-aws-ec2-complete-guide/)
   Use Amazon image
   sudoedit /etc/sudoers
     add /usr/local/bin to the secure_path
@@ -14,3 +14,4 @@ Amazon EC2 Setup
   cd npm
   make
   sudo make install
+  sudo iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to 3000
