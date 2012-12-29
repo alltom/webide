@@ -67,7 +67,8 @@ var postIt = function (url, data) {
 
 	form.submit();
 };
-
+</script>
+<script>
 $(function() {
 	var tabTitle = $( "#tab_title" ),
 		tabTemplate = "<li><a href='#{href}'>#{label}</a> <span class='ui-icon ui-icon-close'>Remove Tab</span></li>",
@@ -76,6 +77,26 @@ $(function() {
 	var tabs = $("#tabs").tabs();
 
 	var compilePromise = new $.Deferred().reject();
+
+	var loadProject = function () {
+		var loaded = false;
+		var json = localStorage.getItem('files');
+		if (json) {
+			try {
+				var obj = JSON.parse(json);
+				loaded = true;
+				obj.files.forEach(function (f) {
+					addTab(f.filename, f.contents);
+				});
+			} catch (e) {
+			}
+		}
+		return loaded;
+	};
+
+	var saveProject = function () {
+		localStorage.setItem('files', JSON.stringify({ files: getFiles() }));
+	};
 
 	tabs.find( ".ui-tabs-nav" ).sortable({
 		axis: "x",
@@ -90,8 +111,9 @@ $(function() {
 		modal: true,
 		buttons: {
 			Add: function() {
-				addTab();
-				$( this ).dialog( "close" );
+				var filename = tabTitle.val();
+				addTab(filename, getTemplateContents(filename));
+				$(this).dialog( "close" );
 			},
 			Cancel: function() {
 				$( this ).dialog( "close" );
@@ -104,7 +126,8 @@ $(function() {
 
 	// addTab form: calls addTab function on submit and closes the dialog
 	var form = dialog.find( "form" ).submit(function( event ) {
-		addTab();
+		var filename = tabTitle.val();
+		addTab(filename, getTemplateContents(filename));
 		dialog.dialog( "close" );
 		event.preventDefault();
 	});
@@ -212,14 +235,13 @@ $(function() {
 	};
 
 	// actual addTab function: adds new tab using the input from the form above
-	var addTab = function () {
-		var label = tabTitle.val() || "Tab " + tabCounter,
+	var addTab = function (filename, contents) {
+		var label = filename,
 			id = "tabs-" + tabCounter,
 			li = $( tabTemplate.replace( /#\{href\}/g, "#" + id ).replace( /#\{label\}/g, label ) ),
-			tabContentDom = $("<div id='" + id + "'></div>"),
-			contents = getTemplateContents(label);
+			tabContentDom = $("<div id='" + id + "'></div>");
 
-		tabs.find( ".ui-tabs-nav" ).append( li );
+		tabs.find( ".ui-tabs-nav" ).append(li);
 		tabs.append(tabContentDom);
 		tabs.tabs('refresh');
 		tabCounter++;
@@ -237,16 +259,19 @@ $(function() {
 		tabContentDom.data("codeMirror", codeMirror);
 		tabContentDom.data("filename", label);
 
-		codeMirror.on("change", startCompile);
+		codeMirror.on("change", function () {
+			startCompile();
+			saveProject();
+		});
 
 		startCompile();
+		saveProject();
 	}
 
 	// add_tab button: just opens the dialog
 	$("#add_tab")
 		.button()
 		.click(function() {
-			// alert(JSON.stringify(getNextFilename()));
 			tabTitle.val(getNextFilename())
 			dialog.dialog("open");
 		});
@@ -254,9 +279,7 @@ $(function() {
 	// download button: downloads all files in a zip file
 	$("#download")
 		.button()
-		.click(function() {
-			download();
-		});
+		.click(download);
 
 	// close icon: removing the tab on click
 	$("#tabs span.ui-icon-close").live( "click", function() {
@@ -264,8 +287,11 @@ $(function() {
 		$( "#" + panelId ).remove();
 		tabs.tabs("refresh");
 		startCompile();
+		saveProject();
 	});
 
-	dialog.dialog("open");
+	if (!loadProject()) {
+		dialog.dialog("open");
+	}
 });
 </script>
