@@ -1,0 +1,271 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>WeBide</title>
+
+<style>
+#dialog label, #dialog input { display:block; }
+#dialog label { margin-top: 0.5em; }
+#dialog input, #dialog textarea { width: 95%; }
+#tabs { margin-top: 1em; }
+#tabs li .ui-icon-close { float: left; margin: 0.4em 0.2em 0 0; cursor: pointer; }
+#add_tab { cursor: pointer; }
+
+.CodeMirror {
+	border: 1px solid #eee;
+	height: auto;
+}
+.CodeMirror-scroll {
+	overflow-x: auto;
+	overflow-y: hidden;
+}
+</style>
+<link rel="stylesheet" href="css/smoothness/jquery-ui-1.9.2.custom.css" />
+<link rel="stylesheet" href="css/codemirror.css" />
+
+<div id="dialog" title="File Properties">
+	<form>
+		<fieldset class="ui-helper-reset">
+			<label for="tab_title">Title</label>
+			<input type="text" name="tab_title" id="tab_title" value="main.c" class="ui-widget-content ui-corner-all" />
+		</fieldset>
+	</form>
+</div>
+ 
+<p>
+<button id="add_tab">Add File</button>
+<button id="download">Download Files</button>
+ 
+<div id="tabs">
+	<ul></ul>
+</div>
+
+<pre id="compile-string"></pre>
+<pre id="response"></pre>
+
+<script type="text/javascript" src="js/underscore.js"></script>
+<script type="text/javascript" src="js/jquery-1.8.3.js"></script>
+<script type="text/javascript" src="js/jquery-ui-1.9.2.custom.js"></script>
+<script type="text/javascript" src="js/codemirror.js"></script>
+<script type="text/javascript" src="js/codemirror-mode-clike.js"></script>
+<script>
+var postIt = function (url, data) {
+	var form = $('<form />', {
+		method: 'POST',
+		action: url
+	}).appendTo($(document.body));
+
+	$.param(data).split('&').forEach(function (pair) {
+		var splitPair = pair.split('=');
+		var key = decodeURIComponent(splitPair[0].replace(/\+/g, "%20"));
+		var value = decodeURIComponent(splitPair[1].replace(/\+/g, "%20"));
+		form.append($('<input />', {
+			type: 'hidden',
+			name: key,
+			value: value
+		}));
+	});
+
+	form.submit();
+};
+
+$(function() {
+	var tabTitle = $( "#tab_title" ),
+		tabTemplate = "<li><a href='#{href}'>#{label}</a> <span class='ui-icon ui-icon-close'>Remove Tab</span></li>",
+		tabCounter = 1;
+
+	var tabs = $("#tabs").tabs();
+
+	var compilePromise = new $.Deferred().reject();
+
+	tabs.find( ".ui-tabs-nav" ).sortable({
+		axis: "x",
+		stop: function() {
+			tabs.tabs( "refresh" );
+		}
+	});
+
+	// modal dialog init: custom buttons and a "close" callback reseting the form inside
+	var dialog = $( "#dialog" ).dialog({
+		autoOpen: false,
+		modal: true,
+		buttons: {
+			Add: function() {
+				addTab();
+				$( this ).dialog( "close" );
+			},
+			Cancel: function() {
+				$( this ).dialog( "close" );
+			}
+		},
+		close: function() {
+			form[ 0 ].reset();
+		}
+	});
+
+	// addTab form: calls addTab function on submit and closes the dialog
+	var form = dialog.find( "form" ).submit(function( event ) {
+		addTab();
+		dialog.dialog( "close" );
+		event.preventDefault();
+	});
+
+	// returns an array with the information about all open files
+	var getFiles = function () {
+		var files = [];
+		$('#tabs > div').each(function(index, elem) {
+			var codeMirror = $(elem).data("codeMirror");
+			var file = {
+				filename: $(elem).data("filename"),
+				contents: $(elem).data("codeMirror").getValue()
+			};
+			files.push(file);
+		});
+		return files;
+	};
+
+	var getNextFilename = function () {
+		var files = getFiles();
+		if (files.length === 0) {
+			return 'main.c';
+		} else if (files.length === 1) {
+			var match = /^(.+)\.(.+)$/.exec(files[0].filename);
+			if (match) {
+				var basename = match[1];
+				var extension = match[2];
+				if (extension === 'c') return basename + '.h';
+				if (extension === 'cpp') return basename + '.h';
+				if (extension === 'h') return basename + '.c';
+				if (extension === 'hpp') return basename + '.c';
+			}
+		} else {
+			var headerFiles = files.filter(function (f) { return /\.h(pp)?$/.test(f.filename); });
+			if (headerFiles.length === 0) {
+				return 'main.h';
+			}
+		}
+
+		// find a 
+		for (var i = 2; ; i++) {
+			var name = 'main' + i + '.c';
+			if (!files.some(function (f) { return f.filename === name; })) {
+				return name;
+			}
+		}
+	};
+
+	var getTemplateContents = function (filename) {
+		var files = getFiles();
+
+		if (/\.c(pp)?$/.test(filename)) {
+			if (files.some(function (f) { return /\.c(pp)?$/.test(f.filename); })) {
+				return '#include <stdio.h>\n\n';
+			} else {
+				return '#include <stdio.h>\n\nint main(int argc, char *argv[]) {\n\tprintf("Hello, World!");\n\treturn 0;\n}\n';
+			}
+		}
+
+		return '';
+	};
+
+	// compile the stuffs
+	var compile = _.debounce(function () {
+		var promise = new $.Deferred();
+		compilePromise.reject();
+		compilePromise = promise;
+
+		var files = getFiles();
+		$.ajax("compile", {
+			type: "POST",
+			dataType: "json",
+			data: { files: files },
+			success: function (data) {
+				if (promise.state() === 'pending') {
+					$("#compile-string").text(data.compile.command);
+					if (data.compile.stderr) {
+						$("#response").text(data.compile.stderr);
+					} else {
+						$("#response").text("No compile errors!");
+					}
+					promise.resolve();
+				}
+			},
+			error: function (jqXHR, textStatus) {
+				if (promise.state() === 'pending') {
+					alert(textStatus);
+					promise.resolve();
+				}
+			}
+		});
+	}, 1000);
+
+	// start compiling (show 'loading' indicator, trigger a compile)
+	var startCompile = function () {
+		$("#compile-string").empty();
+		$("#response").text("...");
+		compile();
+	};
+
+	// download the stuffs
+	var download = function () {
+		// redirect to the ZIP
+		postIt("download", { files: getFiles() });
+	};
+
+	// actual addTab function: adds new tab using the input from the form above
+	var addTab = function () {
+		var label = tabTitle.val() || "Tab " + tabCounter,
+			id = "tabs-" + tabCounter,
+			li = $( tabTemplate.replace( /#\{href\}/g, "#" + id ).replace( /#\{label\}/g, label ) ),
+			tabContentDom = $("<div id='" + id + "'></div>"),
+			contents = getTemplateContents(label);
+
+		tabs.find( ".ui-tabs-nav" ).append( li );
+		tabs.append(tabContentDom);
+		tabs.tabs('refresh');
+		tabCounter++;
+
+		// only show CodeMirror after tab is active
+		tabs.tabs("option", "active", tabs.tabs('length')-1);
+		var codeMirror = CodeMirror(tabContentDom.get(0), {
+			mode: "text/x-c++src",
+			value: contents,
+			lineNumbers: true,
+			indentWithTabs: true,
+			tabSize: 4,
+			indentUnit: 4
+		});
+		tabContentDom.data("codeMirror", codeMirror);
+		tabContentDom.data("filename", label);
+
+		codeMirror.on("change", startCompile);
+
+		startCompile();
+	}
+
+	// add_tab button: just opens the dialog
+	$("#add_tab")
+		.button()
+		.click(function() {
+			// alert(JSON.stringify(getNextFilename()));
+			tabTitle.val(getNextFilename())
+			dialog.dialog("open");
+		});
+
+	// download button: downloads all files in a zip file
+	$("#download")
+		.button()
+		.click(function() {
+			download();
+		});
+
+	// close icon: removing the tab on click
+	$("#tabs span.ui-icon-close").live( "click", function() {
+		var panelId = $(this).closest("li").remove().attr( "aria-controls" );
+		$( "#" + panelId ).remove();
+		tabs.tabs("refresh");
+		startCompile();
+	});
+
+	dialog.dialog("open");
+});
+</script>
