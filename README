@@ -1,4 +1,4 @@
-Amazon EC2 Setup (http://iconof.com/blog/how-to-install-setup-node-js-on-amazon-aws-ec2-complete-guide/)
+Amazon EC2 Setup
   Use Amazon image
   sudoedit /etc/sudoers
     add /usr/local/bin to the secure_path
@@ -15,3 +15,7 @@ Amazon EC2 Setup (http://iconof.com/blog/how-to-install-setup-node-js-on-amazon-
   make
   sudo make install
   sudo iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to 3000
+
+Sources
+  http://iconof.com/blog/how-to-install-setup-node-js-on-amazon-aws-ec2-complete-guide/
+  http://www.bennadel.com/blog/2321-How-I-Got-Node-js-Running-On-A-Linux-Micro-Instance-Using-Amazon-EC2.htm
