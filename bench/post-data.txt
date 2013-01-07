@@ -1,0 +1,1 @@
+files%5B0%5D%5Bfilename%5D=main.c&files%5B0%5D%5Bcontents%5D=%23include+%3Cstdio.h%3E%0A%0Aint+main()+%7B%0A++++printf(%22%25d%5Cn%22%2C+answer())%3B%0A++++return+0%3B%0A%7D%0Af
